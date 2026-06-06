@@ -1,0 +1,76 @@
+.candidate-detail-page { max-width: 900px; margin: 0 auto; animation: fadeIn var(--transition-base); }
+
+.candidate-header {
+  display: flex; align-items: center; gap: var(--space-5);
+  margin: var(--space-5) 0 var(--space-6);
+  padding: var(--space-6);
+  background: var(--glass-bg); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+}
+.candidate-avatar {
+  width: 64px; height: 64px; border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--font-size-2xl); font-weight: 700; color: white; flex-shrink: 0;
+}
+.candidate-header-info { flex: 1; }
+.candidate-header-info h1 { font-size: var(--font-size-xl); margin: 0 0 var(--space-2); }
+.candidate-header-meta { display: flex; gap: var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.candidate-header-meta span { display: flex; align-items: center; gap: var(--space-1); }
+
+.candidate-score-big {
+  text-align: center; padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg); border: 1px solid var(--color-border);
+}
+.score-big-number { display: block; font-size: var(--font-size-3xl); font-weight: 700; color: var(--sc); }
+.score-big-label { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+
+.score-dimensions {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+.score-dim-card {
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
+  padding: var(--space-4); background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg); border: 1px solid var(--color-border);
+}
+.dim-card-value { font-size: var(--font-size-2xl); font-weight: 700; }
+.dim-card-label { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+
+.explanation-box {
+  padding: var(--space-5); background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg); border: 1px solid var(--color-border);
+  margin-bottom: var(--space-6);
+  border-left: 3px solid var(--color-primary);
+}
+.explanation-box h3 { font-size: var(--font-size-sm); margin: 0 0 var(--space-2); color: var(--color-primary); }
+.explanation-box p { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin: 0; line-height: 1.6; }
+
+.detail-tabs { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); border-bottom: 1px solid var(--color-border); }
+.detail-tab {
+  padding: var(--space-3) var(--space-5); background: none; border: none;
+  color: var(--color-text-secondary); cursor: pointer; font-size: var(--font-size-sm); font-weight: 500;
+  border-bottom: 2px solid transparent; transition: all var(--transition-fast);
+}
+.detail-tab:hover { color: var(--color-text-primary); }
+.detail-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+.profile-content section { margin-bottom: var(--space-6); }
+.profile-content h3 { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-base); margin-bottom: var(--space-3); }
+
+.exp-item { padding: var(--space-4); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--space-2); border-left: 2px solid var(--color-success); }
+.exp-header { font-size: var(--font-size-sm); }
+.exp-dates { font-size: var(--font-size-xs); color: var(--color-text-tertiary); margin: var(--space-1) 0; }
+.exp-resp { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: var(--space-1) 0; }
+
+.edu-item { padding: var(--space-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--space-2); }
+.edu-meta { font-size: var(--font-size-xs); color: var(--color-text-tertiary); }
+
+.skills-grid { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.history-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.history-table th { text-align: left; padding: var(--space-3); color: var(--color-text-tertiary); font-weight: 600; border-bottom: 1px solid var(--color-border); }
+.history-table td { padding: var(--space-3); border-bottom: 1px solid var(--color-border); }
+.no-history { text-align: center; color: var(--color-text-tertiary); padding: var(--space-8); }

@@ -1,0 +1,199 @@
+// ─── RecruitIQ Prisma Schema ────────────────────────────────────────────────
+// Multi-tenant AI-powered resume screening system
+// All models use UUID primary keys and tenantId for row-level isolation.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  RECRUITER
+  HIRING_MANAGER
+  ADMIN
+}
+
+enum JdStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum BatchJobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum BatchJobType {
+  PARSE
+  SCORE
+  ENRICH
+  EXPORT
+  RESCREEN
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  plan          String   @default("free")
+  maxCandidates Int      @default(50000)
+  createdAt     DateTime @default(now())
+
+  users           User[]
+  candidates      Candidate[]
+  jobDescriptions JobDescription[]
+  batchJobs       BatchJob[]
+  auditLogs       AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(RECRUITER)
+  tenantId     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobDescriptions JobDescription[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model Candidate {
+  id                String    @id @default(uuid())
+  tenantId          String
+  name              String
+  email             String?
+  phone             String?
+  rawResumeUrl      String?
+  parsedData        Json?
+  enrichedData      Json?
+  consentEnrichment Boolean   @default(false)
+  tags              String[]  @default([])
+  sourceBatch       String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scoreRecords ScoreRecord[]
+
+  @@index([tenantId, email])
+  @@index([tenantId, deletedAt])
+  @@map("candidates")
+}
+
+model JobDescription {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  title              String
+  rawSource          String   @db.Text
+  parsedRequirements Json?
+  weightProfile      Json     @default("{\"skills\":40,\"experience\":30,\"education\":15,\"profile\":15}")
+  status             JdStatus @default(DRAFT)
+  screeningInstructions String? @db.Text
+  createdById        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  scoreRecords ScoreRecord[]
+  batchJobs    BatchJob[]
+
+  @@index([tenantId, status])
+  @@map("job_descriptions")
+}
+
+model ScoreRecord {
+  id              String   @id @default(uuid())
+  candidateId     String
+  jdId            String
+  totalScore      Int
+  dimensionScores Json
+  explanation     String?  @db.Text
+  flags           Json?
+  scoredAt        DateTime @default(now())
+
+  candidate Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jd        JobDescription @relation(fields: [jdId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, jdId, scoredAt])
+  @@index([candidateId, jdId])
+  @@index([jdId, totalScore])
+  @@map("score_records")
+}
+
+model BatchJob {
+  id          String         @id @default(uuid())
+  tenantId    String
+  jdId        String?
+  poolFilter  Json?
+  status      BatchJobStatus @default(QUEUED)
+  jobType     BatchJobType
+  totalCount  Int            @default(0)
+  doneCount   Int            @default(0)
+  failedCount Int            @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  errorLog    Json?
+  createdAt   DateTime       @default(now())
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jd     JobDescription? @relation(fields: [jdId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@map("batch_jobs")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  actorId    String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User   @relation(fields: [actorId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}

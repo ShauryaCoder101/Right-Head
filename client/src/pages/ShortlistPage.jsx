@@ -1,0 +1,370 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal } from 'lucide-react';
+import api from '../services/api';
+import { useToast } from '../components/common/ToastContainer';
+import Badge from '../components/common/Badge';
+import Button from '../components/common/Button';
+import BatchProgress from '../components/common/BatchProgress';
+import { getScoreColor } from '../utils/formatters';
+import './ShortlistPage.css';
+
+export default function ShortlistPage() {
+  const { jdId } = useParams();
+  const [jd, setJd] = useState(null);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [scoring, setScoring] = useState(false);
+  const [scoringBatchId, setScoringBatchId] = useState(null);
+  const [instructions, setInstructions] = useState('');
+  const [instructionsExpanded, setInstructionsExpanded] = useState(false);
+  const [savingInstructions, setSavingInstructions] = useState(false);
+  const [rescreening, setRescreening] = useState(false);
+  const [rescreenBatchId, setRescreenBatchId] = useState(null);
+  const [parsedCandidateCount, setParsedCandidateCount] = useState(null);
+  const [weights, setWeights] = useState({ skills: 35, experience: 25, education: 15, profile: 15, location: 10 });
+  const [savingWeights, setSavingWeights] = useState(false);
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  const weightsTotal = useMemo(() => Object.values(weights).reduce((a, b) => a + b, 0), [weights]);
+  const weightsValid = Math.abs(weightsTotal - 100) < 0.5;
+
+  useEffect(() => {
+    loadResults();
+    loadCandidateCount();
+  }, [jdId]);
+
+  const loadResults = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/scoring/results/${jdId}?sortBy=totalScore&limit=50`);
+      setJd(data.jd);
+      setResults(data.results);
+      if (data.jd?.screeningInstructions) {
+        setInstructions(data.jd.screeningInstructions);
+      }
+      if (data.jd?.weightProfile) {
+        const wp = data.jd.weightProfile;
+        setWeights({
+          skills: wp.skills ?? 35,
+          experience: wp.experience ?? 25,
+          education: wp.education ?? 15,
+          profile: wp.profile ?? 15,
+          location: wp.location ?? 10,
+        });
+      }
+    } catch {
+      toast.error('Failed to load results');
+    } finally { setLoading(false); }
+  };
+
+  const loadCandidateCount = async () => {
+    try {
+      const { data } = await api.get('/candidates?limit=1');
+      setParsedCandidateCount(data.total || 0);
+    } catch {}
+  };
+
+  const handleRunScoring = async () => {
+    setScoring(true);
+    try {
+      const { data } = await api.post('/scoring/run', { jdId });
+      setScoringBatchId(data.batchJobId);
+      toast.success(data.message || `Scoring ${data.candidateCount} candidates...`);
+    } catch (err) {
+      const errData = err.response?.data?.error;
+      const msg = typeof errData === 'object' ? errData?.message : errData;
+      toast.error(msg || 'Failed to start scoring');
+    } finally { setScoring(false); }
+  };
+
+  const handleSaveInstructions = async () => {
+    setSavingInstructions(true);
+    try {
+      await api.put(`/jd/${jdId}`, { screeningInstructions: instructions });
+      toast.success('Instructions saved');
+    } catch {
+      toast.error('Failed to save instructions');
+    } finally {
+      setSavingInstructions(false);
+    }
+  };
+
+  const handleSaveWeights = async () => {
+    if (!weightsValid) {
+      toast.error(`Weights must sum to 100 (currently ${weightsTotal})`);
+      return;
+    }
+    setSavingWeights(true);
+    try {
+      await api.put(`/jd/${jdId}/weights`, weights);
+      toast.success('Weight profile saved');
+    } catch (err) {
+      const msg = err.response?.data?.error;
+      toast.error(typeof msg === 'string' ? msg : 'Failed to save weights');
+    } finally {
+      setSavingWeights(false);
+    }
+  };
+
+  const handleWeightChange = (key, value) => {
+    setWeights(prev => ({ ...prev, [key]: parseInt(value) || 0 }));
+  };
+
+  const handleRescreenWithInstructions = async () => {
+    setRescreening(true);
+    try {
+      const { data } = await api.post('/scoring/run', { jdId, instructions });
+      setRescreenBatchId(data.batchJobId);
+      toast.success(data.message || `Re-screening ${data.candidateCount} candidates...`);
+    } catch (err) {
+      const errData = err.response?.data?.error;
+      const msg = typeof errData === 'object' ? errData?.message : errData;
+      toast.error(msg || 'Failed to start re-screening');
+    } finally {
+      setRescreening(false);
+    }
+  };
+
+  const handleRescreenComplete = (batch) => {
+    setRescreenBatchId(null);
+    if (batch.doneCount > 0) {
+      toast.success(`Re-screening complete! ${batch.doneCount} candidates re-ranked.`);
+    }
+    loadResults();
+  };
+
+  const handleScoringComplete = (batch) => {
+    setScoringBatchId(null);
+    if (batch.doneCount > 0) {
+      toast.success(`Scoring complete! ${batch.doneCount} candidates ranked.`);
+    }
+    loadResults();
+  };
+
+  const handleExportCsv = async () => {
+    try {
+      const res = await api.get(`/export/csv/${jdId}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a'); a.href = url; a.download = `shortlist_${jdId}.csv`; a.click();
+      toast.success('CSV exported!');
+    } catch { toast.error('Export failed'); }
+  };
+
+  return (
+    <div className="shortlist-page">
+      <div className="shortlist-header">
+        <div>
+          <h1>{jd?.title || 'Shortlist'}</h1>
+          <p className="shortlist-meta">
+            {results.length} candidates scored
+            {parsedCandidateCount !== null && (
+              <span className="candidate-pool"> · <Users size={12} /> {parsedCandidateCount} in candidate pool</span>
+            )}
+          </p>
+        </div>
+        <div className="shortlist-actions">
+          <Button variant="ghost" size="sm" icon={Download} onClick={handleExportCsv}>Export CSV</Button>
+          <Button variant="secondary" size="sm" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={!!scoringBatchId}>
+            {scoring ? 'Starting...' : 'Run Scoring'}
+          </Button>
+          <Button variant="primary" size="sm" icon={ArrowUpDown} onClick={loadResults}>Refresh</Button>
+        </div>
+      </div>
+
+      {/* AI Instructions collapsible section */}
+      <div className="ai-instructions-section">
+        <button
+          className="ai-instructions-toggle"
+          onClick={() => setInstructionsExpanded((v) => !v)}
+        >
+          <div className="ai-instructions-toggle-left">
+            <MessageSquare size={16} />
+            <span>AI Instructions</span>
+            {instructions && !instructionsExpanded && (
+              <span className="ai-instructions-preview">{instructions.slice(0, 60)}{instructions.length > 60 ? '…' : ''}</span>
+            )}
+          </div>
+          {instructionsExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+
+        {instructionsExpanded && (
+          <div className="ai-instructions-body">
+            {/* Weight Sliders */}
+            <div className="weight-sliders-section">
+              <div className="weight-sliders-header">
+                <SlidersHorizontal size={14} />
+                <span>Scoring Weights</span>
+                <span className={`weight-total ${weightsValid ? 'valid' : 'invalid'}`}>
+                  {weightsTotal}/100
+                </span>
+              </div>
+              <div className="weight-sliders">
+                {[
+                  { key: 'skills', label: 'Skills', color: 'var(--color-primary)' },
+                  { key: 'experience', label: 'Experience', color: 'var(--color-success)' },
+                  { key: 'education', label: 'Education', color: 'var(--color-warning)' },
+                  { key: 'profile', label: 'Profile', color: 'var(--color-accent)' },
+                  { key: 'location', label: 'Location', color: '#f472b6' },
+                ].map(({ key, label, color }) => (
+                  <div key={key} className="weight-slider-row">
+                    <label className="weight-slider-label">{label}</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="50"
+                      value={weights[key]}
+                      onChange={(e) => handleWeightChange(key, e.target.value)}
+                      className="weight-slider-input"
+                      style={{ '--slider-color': color }}
+                    />
+                    <span className="weight-slider-value">{weights[key]}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="weight-slider-actions">
+                <Button variant="ghost" size="sm" icon={Save} onClick={handleSaveWeights} loading={savingWeights} disabled={!weightsValid}>
+                  Save Weights
+                </Button>
+              </div>
+            </div>
+
+            {/* Instructions textarea */}
+            <div className="instructions-divider" />
+            <textarea
+              className="ai-instructions-textarea"
+              placeholder="e.g. Prioritize candidates with defense sector experience, or penalize gaps longer than 2 years…"
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={4}
+            />
+            <div className="ai-instructions-actions">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Save}
+                onClick={handleSaveInstructions}
+                loading={savingInstructions}
+              >
+                Save Instructions
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Zap}
+                onClick={handleRescreenWithInstructions}
+                loading={rescreening}
+                disabled={!instructions.trim() || !!rescreenBatchId}
+              >
+                {rescreening ? 'Starting…' : 'Re-screen with Instructions'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Re-screen progress bar */}
+      {rescreenBatchId && (
+        <BatchProgress
+          batchJobId={rescreenBatchId}
+          label="Re-screening candidates with custom instructions"
+          onComplete={handleRescreenComplete}
+          onDismiss={() => setRescreenBatchId(null)}
+        />
+      )}
+
+      {/* Scoring progress bar */}
+      {scoringBatchId && (
+        <BatchProgress
+          batchJobId={scoringBatchId}
+          label="Scoring candidates with AI"
+          onComplete={handleScoringComplete}
+          onDismiss={() => setScoringBatchId(null)}
+        />
+      )}
+
+      {loading ? (
+        <div className="loading-state">Loading candidates...</div>
+      ) : results.length === 0 ? (
+        <div className="empty-state">
+          <h3>No scored candidates yet</h3>
+          <p>
+            {parsedCandidateCount > 0
+              ? `You have ${parsedCandidateCount} candidate${parsedCandidateCount > 1 ? 's' : ''} ready. Click "Run Scoring" to rank them against this JD.`
+              : 'Upload resumes first on the Candidates page, then come back to run scoring.'}
+          </p>
+          <div className="empty-state-actions">
+            {parsedCandidateCount === 0 && (
+              <Button variant="ghost" onClick={() => navigate('/candidates')}>Upload Resumes</Button>
+            )}
+            <Button variant="primary" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={parsedCandidateCount === 0 || !!scoringBatchId}>
+              {scoring ? 'Starting...' : 'Run Scoring'}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="shortlist-grid">
+          {results.map((r) => {
+            const dims = r.dimensionScores || {};
+            return (
+              <div key={r.candidate.id} className="candidate-card" onClick={() => navigate(`/candidates/${r.candidate.id}`)}>
+                <div className="candidate-card-top">
+                  <div className="score-ring" style={{ '--score-color': getScoreColor(r.totalScore), '--score-pct': `${r.totalScore}%` }}>
+                    <svg viewBox="0 0 36 36" className="score-svg">
+                      <circle cx="18" cy="18" r="15.91" className="score-bg-circle" />
+                      <circle cx="18" cy="18" r="15.91" className="score-fg-circle" strokeDasharray={`${r.totalScore} ${100 - r.totalScore}`} />
+                    </svg>
+                    <span className="score-number">{r.totalScore}</span>
+                  </div>
+                  <div className="candidate-info">
+                    <h3>{r.candidate.name || 'Unknown'}</h3>
+                    <p className="candidate-email">{r.candidate.email || ''}</p>
+                    <div className="rank-badge">#{r.rank}</div>
+                  </div>
+                </div>
+
+                <div className="dimension-bars">
+                  {[
+                    { key: 'skills', label: 'Skills', color: 'var(--color-primary)' },
+                    { key: 'experience', label: 'Exp', color: 'var(--color-success)' },
+                    { key: 'education', label: 'Edu', color: 'var(--color-warning)' },
+                    { key: 'profile', label: 'Profile', color: 'var(--color-accent)' },
+                    { key: 'location', label: 'Loc', color: '#f472b6' },
+                  ].map(({ key, label, color }) => (
+                    <div key={key} className="dim-bar">
+                      <span className="dim-label">{label}</span>
+                      <div className="dim-track">
+                        <div className="dim-fill" style={{ width: `${dims[key] || 0}%`, background: color }} />
+                      </div>
+                      <span className="dim-value">{dims[key] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {r.explanation && typeof r.explanation === 'object' && r.explanation.key_strengths && (
+                  <div className="candidate-strengths">
+                    {r.explanation.key_strengths.slice(0, 2).map((s, i) => (
+                      <span key={i} className="strength-tag">✓ {s}</span>
+                    ))}
+                  </div>
+                )}
+
+                {r.candidate.parsedData?.skills && (
+                  <div className="candidate-skills">
+                    {r.candidate.parsedData.skills.slice(0, 5).map((s, i) => (
+                      <Badge key={i} variant="default" size="sm">{s}</Badge>
+                    ))}
+                    {r.candidate.parsedData.skills.length > 5 && (
+                      <Badge variant="default" size="sm">+{r.candidate.parsedData.skills.length - 5}</Badge>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
