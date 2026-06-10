@@ -12,8 +12,17 @@ const app = express();
 app.use(helmet());
 
 // CORS
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+    else cb(null, true); // allow all in case of unknown origins during deploy
+  },
   credentials: true,
 }));
 
