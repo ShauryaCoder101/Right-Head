@@ -16,7 +16,7 @@ dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env') });
 const envSchema = z.object({
   // ─── Required ──────────────────────────────────────────────────────
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
+  REDIS_URL: z.string().default(''),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
 
