@@ -18,7 +18,7 @@ export default function JDUploadPage() {
   const [url, setUrl] = useState('');
   const [rawText, setRawText] = useState('');
   const [parsedJd, setParsedJd] = useState(null);
-  const [weights, setWeights] = useState({ skills: 40, experience: 30, education: 15, profile: 15 });
+  const [weights, setWeights] = useState({ skills: 35, experience: 25, education: 15, profile: 15, location: 10 });
   const [loading, setLoading] = useState(false);
 
   const { createJd, updateWeights } = useJdStore();
@@ -122,10 +122,10 @@ export default function JDUploadPage() {
           <h2>Set Scoring Weights</h2>
           <p className="review-hint">Adjust how much each dimension contributes to the overall score.</p>
           <div className="weight-sliders">
-            {[{ key: 'skills', label: 'Skills Match', color: 'var(--color-primary)' }, { key: 'experience', label: 'Experience', color: 'var(--color-success)' }, { key: 'education', label: 'Education', color: 'var(--color-warning)' }, { key: 'profile', label: 'Profile', color: 'var(--color-accent)' }].map(({ key, label, color }) => (
+            {[{ key: 'skills', label: 'Skills Match', color: 'var(--color-primary)' }, { key: 'experience', label: 'Experience', color: 'var(--color-success)' }, { key: 'education', label: 'Education', color: 'var(--color-warning)' }, { key: 'profile', label: 'Profile', color: 'var(--color-accent)' }, { key: 'location', label: 'Location', color: '#f472b6' }].map(({ key, label, color }) => (
               <div key={key} className="weight-slider-row">
                 <label>{label}</label>
-                <input type="range" min="0" max="100" value={weights[key]} onChange={(e) => handleWeightChange(key, e.target.value)} style={{ accentColor: color }} />
+                <input type="range" min="0" max="50" value={weights[key]} onChange={(e) => handleWeightChange(key, e.target.value)} style={{ accentColor: color }} />
                 <span className="weight-value" style={{ color }}>{weights[key]}%</span>
               </div>
             ))}
@@ -143,7 +143,7 @@ export default function JDUploadPage() {
           <div className="confirm-summary">
             <p><strong>Title:</strong> {parsedJd?.title}</p>
             <p><strong>Required Skills:</strong> {parsedJd?.parsedRequirements?.required_skills?.length || 0}</p>
-            <p><strong>Weights:</strong> Skills {weights.skills}% · Experience {weights.experience}% · Education {weights.education}% · Profile {weights.profile}%</p>
+            <p><strong>Weights:</strong> Skills {weights.skills}% · Experience {weights.experience}% · Education {weights.education}% · Profile {weights.profile}% · Location {weights.location}%</p>
           </div>
           <div className="step-actions">
             <Button variant="ghost" onClick={() => setStep(2)}>Back</Button>
