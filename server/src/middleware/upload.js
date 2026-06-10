@@ -7,11 +7,17 @@
 const multer = require('multer');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
 const { config } = require('../config/env');
 const { AppError } = require('./errorHandler');
 
 // Resolve the uploads directory relative to the server root
 const UPLOADS_DIR = path.resolve(__dirname, '..', '..', 'uploads');
+
+// Ensure uploads directory exists (Railway has ephemeral filesystem)
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 /**
  * Allowed MIME types for resume and JD uploads.
