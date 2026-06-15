@@ -64,48 +64,62 @@ async function upload(req, res, next) {
     });
 
     // Parse inline (no Redis required) — runs after response is sent
-    let doneCount = 0;
-    let failedCount = 0;
-    for (const { id, file } of candidates) {
-      try {
-        console.log(`📄 Parsing resume: ${file.originalname}`);
-        const rawText = await extractText(file.path, file.mimetype);
-        const parsed = await parseResume(rawText);
+    // Wrap in async IIFE so errors don't crash silently
+    (async () => {
+      console.log(`🚀 Starting background parsing for batch ${batchJob.id} (${files.length} files)`);
+      let doneCount = 0;
+      let failedCount = 0;
+      for (const { id, file } of candidates) {
+        try {
+          console.log(`📄 Parsing resume: ${file.originalname}`);
+          const rawText = await extractText(file.path, file.mimetype);
+          console.log(`📝 Extracted ${rawText.length} chars from ${file.originalname}`);
+          const parsed = await parseResume(rawText);
 
-        await prisma.candidate.update({
-          where: { id },
-          data: {
-            name: parsed.name || file.originalname.replace(/\.(pdf|docx|txt)$/i, ''),
-            email: parsed.email || null,
-            phone: parsed.phone || null,
-            parsedData: parsed,
-          },
+          await prisma.candidate.update({
+            where: { id },
+            data: {
+              name: parsed.name || file.originalname.replace(/\.(pdf|docx|txt)$/i, ''),
+              email: parsed.email || null,
+              phone: parsed.phone || null,
+              parsedData: parsed,
+            },
+          });
+          doneCount++;
+          console.log(`✅ Parsed: ${parsed.name || file.originalname} (${doneCount}/${files.length})`);
+        } catch (err) {
+          failedCount++;
+          console.error(`❌ Failed to parse ${file.originalname}: ${err.message}`);
+          console.error(err.stack);
+        }
+
+        // Update batch progress
+        await prisma.batchJob.update({
+          where: { id: batchJob.id },
+          data: { doneCount, failedCount },
         });
-        doneCount++;
-        console.log(`✅ Parsed: ${parsed.name || file.originalname} (${doneCount}/${files.length})`);
-      } catch (err) {
-        failedCount++;
-        console.error(`❌ Failed to parse ${file.originalname}: ${err.message}`);
       }
 
-      // Update batch progress
+      // Mark batch complete
       await prisma.batchJob.update({
         where: { id: batchJob.id },
-        data: { doneCount, failedCount },
+        data: {
+          status: failedCount === files.length ? 'FAILED' : 'DONE',
+          doneCount,
+          failedCount,
+          completedAt: new Date(),
+        },
       });
-    }
-
-    // Mark batch complete
-    await prisma.batchJob.update({
-      where: { id: batchJob.id },
-      data: {
-        status: failedCount === files.length ? 'FAILED' : 'DONE',
-        doneCount,
-        failedCount,
-        completedAt: new Date(),
-      },
+      console.log(`🏁 Batch ${batchJob.id} complete: ${doneCount} parsed, ${failedCount} failed`);
+    })().catch(err => {
+      console.error(`💥 Background parsing crashed for batch ${batchJob.id}:`, err.message);
+      console.error(err.stack);
+      // Mark batch as failed
+      prisma.batchJob.update({
+        where: { id: batchJob.id },
+        data: { status: 'FAILED', completedAt: new Date() },
+      }).catch(() => {});
     });
-    console.log(`🏁 Batch ${batchJob.id} complete: ${doneCount} parsed, ${failedCount} failed`);
   } catch (err) {
     next(err);
   }
