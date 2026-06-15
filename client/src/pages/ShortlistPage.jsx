@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal } from 'lucide-react';
+import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal, CheckSquare, Square } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../components/common/ToastContainer';
 import Badge from '../components/common/Badge';
@@ -24,6 +24,7 @@ export default function ShortlistPage() {
   const [parsedCandidateCount, setParsedCandidateCount] = useState(null);
   const [weights, setWeights] = useState({ skills: 35, experience: 25, education: 15, profile: 15, location: 10 });
   const [savingWeights, setSavingWeights] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -69,7 +70,9 @@ export default function ShortlistPage() {
   const handleRunScoring = async () => {
     setScoring(true);
     try {
-      const { data } = await api.post('/scoring/run', { jdId });
+      const body = { jdId };
+      if (selectedIds.size > 0) body.candidateIds = [...selectedIds];
+      const { data } = await api.post('/scoring/run', body);
       setScoringBatchId(data.batchJobId);
       toast.success(data.message || `Scoring ${data.candidateCount} candidates...`);
     } catch (err) {
@@ -115,7 +118,9 @@ export default function ShortlistPage() {
   const handleRescreenWithInstructions = async () => {
     setRescreening(true);
     try {
-      const { data } = await api.post('/scoring/run', { jdId, instructions });
+      const body = { jdId, instructions };
+      if (selectedIds.size > 0) body.candidateIds = [...selectedIds];
+      const { data } = await api.post('/scoring/run', body);
       setRescreenBatchId(data.batchJobId);
       toast.success(data.message || `Re-screening ${data.candidateCount} candidates...`);
     } catch (err) {
@@ -124,6 +129,24 @@ export default function ShortlistPage() {
       toast.error(msg || 'Failed to start re-screening');
     } finally {
       setRescreening(false);
+    }
+  };
+
+  const toggleSelectCandidate = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === results.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(results.map(r => r.candidate.id)));
     }
   };
 
@@ -304,12 +327,34 @@ export default function ShortlistPage() {
           </div>
         </div>
       ) : (
+        <>
+          {results.length > 0 && (
+            <div className="selection-bar">
+              <button className="select-all-btn" onClick={toggleSelectAll}>
+                {selectedIds.size === results.length ? <CheckSquare size={16} /> : <Square size={16} />}
+                {selectedIds.size === results.length ? 'Deselect All' : 'Select All'}
+              </button>
+              {selectedIds.size > 0 && (
+                <span className="selection-count">
+                  {selectedIds.size} selected — scoring will only apply to selected candidates
+                </span>
+              )}
+              {selectedIds.size > 0 && (
+                <Button variant="primary" size="sm" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={!!scoringBatchId}>
+                  Score Selected ({selectedIds.size})
+                </Button>
+              )}
+            </div>
+          )}
         <div className="shortlist-grid">
           {results.map((r) => {
             const dims = r.dimensionScores || {};
             return (
-              <div key={r.candidate.id} className="candidate-card" onClick={() => navigate(`/candidates/${r.candidate.id}`)}>
+              <div key={r.candidate.id} className={`candidate-card ${selectedIds.has(r.candidate.id) ? 'selected' : ''}`} onClick={() => navigate(`/candidates/${r.candidate.id}`)}>
                 <div className="candidate-card-top">
+                  <div className="card-checkbox" onClick={(e) => toggleSelectCandidate(r.candidate.id, e)}>
+                    {selectedIds.has(r.candidate.id) ? <CheckSquare size={18} className="checkbox-checked" /> : <Square size={18} className="checkbox-unchecked" />}
+                  </div>
                   <div className="score-ring" style={{ '--score-color': getScoreColor(r.totalScore), '--score-pct': `${r.totalScore}%` }}>
                     <svg viewBox="0 0 36 36" className="score-svg">
                       <circle cx="18" cy="18" r="15.91" className="score-bg-circle" />
@@ -364,6 +409,7 @@ export default function ShortlistPage() {
             );
           })}
         </div>
+        </>
       )}
     </div>
   );
