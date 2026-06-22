@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal, CheckSquare, Square } from 'lucide-react';
+import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal, CheckSquare, Square, X, RefreshCw, UserCheck } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../components/common/ToastContainer';
 import Badge from '../components/common/Badge';
@@ -25,6 +25,11 @@ export default function ShortlistPage() {
   const [weights, setWeights] = useState({ skills: 35, experience: 25, education: 15, profile: 15, location: 10 });
   const [savingWeights, setSavingWeights] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showScoringModal, setShowScoringModal] = useState(false);
+  const [showCandidatePicker, setShowCandidatePicker] = useState(false);
+  const [allCandidates, setAllCandidates] = useState([]);
+  const [pickerSelectedIds, setPickerSelectedIds] = useState(new Set());
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -67,11 +72,17 @@ export default function ShortlistPage() {
     } catch {}
   };
 
-  const handleRunScoring = async () => {
+  const openScoringModal = () => {
+    setShowScoringModal(true);
+  };
+
+  const runScoringWith = async (candidateIdsList) => {
+    setShowScoringModal(false);
+    setShowCandidatePicker(false);
     setScoring(true);
     try {
       const body = { jdId };
-      if (selectedIds.size > 0) body.candidateIds = [...selectedIds];
+      if (candidateIdsList && candidateIdsList.length > 0) body.candidateIds = candidateIdsList;
       const { data } = await api.post('/scoring/run', body);
       setScoringBatchId(data.batchJobId);
       toast.success(data.message || `Scoring ${data.candidateCount} candidates...`);
@@ -80,6 +91,59 @@ export default function ShortlistPage() {
       const msg = typeof errData === 'object' ? errData?.message : errData;
       toast.error(msg || 'Failed to start scoring');
     } finally { setScoring(false); }
+  };
+
+  const handleRunAll = () => runScoringWith(null);
+
+  const handleRunPreviouslyScored = () => {
+    const ids = results.map(r => r.candidate.id);
+    if (ids.length === 0) {
+      toast.error('No previously scored candidates found');
+      return;
+    }
+    runScoringWith(ids);
+  };
+
+  const handleOpenCandidatePicker = async () => {
+    setShowScoringModal(false);
+    setLoadingCandidates(true);
+    setShowCandidatePicker(true);
+    try {
+      const { data } = await api.get('/candidates?limit=500');
+      setAllCandidates(data.candidates || []);
+      // Pre-select previously scored candidates
+      const scoredIds = new Set(results.map(r => r.candidate.id));
+      setPickerSelectedIds(scoredIds);
+    } catch {
+      toast.error('Failed to load candidates');
+    } finally {
+      setLoadingCandidates(false);
+    }
+  };
+
+  const togglePickerCandidate = (id) => {
+    setPickerSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const togglePickerAll = () => {
+    if (pickerSelectedIds.size === allCandidates.length) {
+      setPickerSelectedIds(new Set());
+    } else {
+      setPickerSelectedIds(new Set(allCandidates.map(c => c.id)));
+    }
+  };
+
+  const handleRunSelected = () => {
+    if (pickerSelectedIds.size === 0) {
+      toast.error('Select at least one candidate');
+      return;
+    }
+    runScoringWith([...pickerSelectedIds]);
   };
 
   const handleSaveInstructions = async () => {
@@ -189,7 +253,7 @@ export default function ShortlistPage() {
         </div>
         <div className="shortlist-actions">
           <Button variant="ghost" size="sm" icon={Download} onClick={handleExportCsv}>Export CSV</Button>
-          <Button variant="secondary" size="sm" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={!!scoringBatchId}>
+          <Button variant="secondary" size="sm" icon={Zap} onClick={openScoringModal} loading={scoring} disabled={!!scoringBatchId}>
             {scoring ? 'Starting...' : 'Run Scoring'}
           </Button>
           <Button variant="primary" size="sm" icon={ArrowUpDown} onClick={loadResults}>Refresh</Button>
@@ -321,7 +385,7 @@ export default function ShortlistPage() {
             {parsedCandidateCount === 0 && (
               <Button variant="ghost" onClick={() => navigate('/candidates')}>Upload Resumes</Button>
             )}
-            <Button variant="primary" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={parsedCandidateCount === 0 || !!scoringBatchId}>
+            <Button variant="primary" icon={Zap} onClick={openScoringModal} loading={scoring} disabled={parsedCandidateCount === 0 || !!scoringBatchId}>
               {scoring ? 'Starting...' : 'Run Scoring'}
             </Button>
           </div>
@@ -340,7 +404,7 @@ export default function ShortlistPage() {
                 </span>
               )}
               {selectedIds.size > 0 && (
-                <Button variant="primary" size="sm" icon={Zap} onClick={handleRunScoring} loading={scoring} disabled={!!scoringBatchId}>
+                <Button variant="primary" size="sm" icon={Zap} onClick={() => runScoringWith([...selectedIds])} loading={scoring} disabled={!!scoringBatchId}>
                   Score Selected ({selectedIds.size})
                 </Button>
               )}
@@ -410,6 +474,97 @@ export default function ShortlistPage() {
           })}
         </div>
         </>
+      )}
+    </div>
+
+      {/* Scoring Options Modal */}
+      {showScoringModal && (
+        <div className="modal-overlay" onClick={() => setShowScoringModal(false)}>
+          <div className="scoring-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><Zap size={20} /> Run Scoring</h2>
+              <button className="modal-close" onClick={() => setShowScoringModal(false)}><X size={18} /></button>
+            </div>
+            <p className="modal-subtitle">How would you like to score candidates against this JD?</p>
+            <div className="scoring-options">
+              <button className="scoring-option" onClick={handleRunAll}>
+                <div className="scoring-option-icon all"><Users size={24} /></div>
+                <div className="scoring-option-text">
+                  <h3>All Candidates</h3>
+                  <p>Score every parsed candidate in your pool ({parsedCandidateCount || 0} candidates)</p>
+                </div>
+              </button>
+              {results.length > 0 && (
+                <button className="scoring-option" onClick={handleRunPreviouslyScored}>
+                  <div className="scoring-option-icon previous"><RefreshCw size={24} /></div>
+                  <div className="scoring-option-text">
+                    <h3>Re-run Previously Scored</h3>
+                    <p>Re-score only the {results.length} candidate{results.length > 1 ? 's' : ''} already scored for this JD</p>
+                  </div>
+                </button>
+              )}
+              <button className="scoring-option" onClick={handleOpenCandidatePicker}>
+                <div className="scoring-option-icon select"><UserCheck size={24} /></div>
+                <div className="scoring-option-text">
+                  <h3>Select Specific Candidates</h3>
+                  <p>Choose which candidates to score from your pool</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Picker Modal */}
+      {showCandidatePicker && (
+        <div className="modal-overlay" onClick={() => setShowCandidatePicker(false)}>
+          <div className="candidate-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><UserCheck size={20} /> Select Candidates</h2>
+              <button className="modal-close" onClick={() => setShowCandidatePicker(false)}><X size={18} /></button>
+            </div>
+            <div className="picker-toolbar">
+              <button className="select-all-btn" onClick={togglePickerAll}>
+                {pickerSelectedIds.size === allCandidates.length ? <CheckSquare size={16} /> : <Square size={16} />}
+                {pickerSelectedIds.size === allCandidates.length ? 'Deselect All' : 'Select All'}
+              </button>
+              <span className="selection-count">{pickerSelectedIds.size} of {allCandidates.length} selected</span>
+            </div>
+            <div className="picker-list">
+              {loadingCandidates ? (
+                <div className="loading-state">Loading candidates...</div>
+              ) : allCandidates.length === 0 ? (
+                <div className="loading-state">No parsed candidates found</div>
+              ) : (
+                allCandidates.map(c => {
+                  const isScored = results.some(r => r.candidate.id === c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      className={`picker-item ${pickerSelectedIds.has(c.id) ? 'selected' : ''}`}
+                      onClick={() => togglePickerCandidate(c.id)}
+                    >
+                      <div className="picker-checkbox">
+                        {pickerSelectedIds.has(c.id) ? <CheckSquare size={16} className="checkbox-checked" /> : <Square size={16} className="checkbox-unchecked" />}
+                      </div>
+                      <div className="picker-item-info">
+                        <span className="picker-name">{c.name || 'Unknown'}</span>
+                        {c.email && <span className="picker-email">{c.email}</span>}
+                      </div>
+                      {isScored && <Badge variant="success" size="sm">Scored</Badge>}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="picker-footer">
+              <Button variant="ghost" onClick={() => setShowCandidatePicker(false)}>Cancel</Button>
+              <Button variant="primary" icon={Zap} onClick={handleRunSelected} disabled={pickerSelectedIds.size === 0}>
+                Score {pickerSelectedIds.size} Candidate{pickerSelectedIds.size !== 1 ? 's' : ''}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
