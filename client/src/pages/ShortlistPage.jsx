@@ -479,9 +479,8 @@ export default function ShortlistPage() {
         </div>
         </>
       )}
-    </div>
 
-      {/* Scoring Options Modal */}
+
       {showScoringModal && (
         <div className="modal-overlay" onClick={() => setShowScoringModal(false)}>
           <div className="scoring-modal" onClick={(e) => e.stopPropagation()}>
