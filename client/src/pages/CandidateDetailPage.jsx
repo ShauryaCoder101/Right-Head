@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Mail, Phone, MapPin, Briefcase, GraduationCap, Code, Award, ArrowLeft } from 'lucide-react';
+import { Mail, Phone, MapPin, Briefcase, GraduationCap, Code, Award, ArrowLeft, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCandidateStore } from '../store/candidateStore';
 import Badge from '../components/common/Badge';
@@ -47,7 +47,7 @@ export default function CandidateDetailPage() {
 
       {latestScore && (
         <div className="score-dimensions">
-          {[{ key: 'skills', label: 'Skills', icon: Code, color: 'var(--color-primary)' }, { key: 'experience', label: 'Experience', icon: Briefcase, color: 'var(--color-success)' }, { key: 'education', label: 'Education', icon: GraduationCap, color: 'var(--color-warning)' }, { key: 'profile', label: 'Profile', icon: Award, color: 'var(--color-accent)' }].map(({ key, label, icon: Icon, color }) => (
+          {[{ key: 'skills', label: 'Skills', icon: Code, color: 'var(--color-primary)' }, { key: 'experience', label: 'Experience', icon: Briefcase, color: 'var(--color-success)' }, { key: 'education', label: 'Education', icon: GraduationCap, color: 'var(--color-warning)' }, { key: 'profile', label: 'Profile', icon: Award, color: 'var(--color-accent)' }, { key: 'location', label: 'Location', icon: MapPin, color: '#f472b6' }].map(({ key, label, icon: Icon, color }) => (
             <div key={key} className="score-dim-card">
               <Icon size={20} style={{ color }} />
               <span className="dim-card-value" style={{ color }}>{dims[key] || 0}</span>
@@ -57,12 +57,57 @@ export default function CandidateDetailPage() {
         </div>
       )}
 
-      {latestScore?.explanation && (
-        <div className="explanation-box">
-          <h3>AI Assessment</h3>
-          <p>{latestScore.explanation}</p>
-        </div>
-      )}
+      {latestScore?.explanation && (() => {
+        let parsed = null;
+        const raw = latestScore.explanation;
+        if (typeof raw === 'object' && raw !== null) {
+          parsed = raw;
+        } else if (typeof raw === 'string') {
+          try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+        }
+        return (
+          <div className="explanation-box">
+            <h3>AI Assessment</h3>
+            {parsed ? (
+              <>
+                {parsed.summary && <p className="assessment-summary">{parsed.summary}</p>}
+                {parsed.key_strengths?.length > 0 && (
+                  <div className="assessment-section">
+                    <h4><CheckCircle size={16} className="strength-icon" /> Strengths</h4>
+                    <ul className="assessment-list">
+                      {parsed.key_strengths.map((s, i) => (
+                        <li key={i}><CheckCircle size={14} className="strength-icon" /> {s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {parsed.key_gaps?.length > 0 && (
+                  <div className="assessment-section">
+                    <h4><XCircle size={16} className="gap-icon" /> Gaps</h4>
+                    <ul className="assessment-list">
+                      {parsed.key_gaps.map((g, i) => (
+                        <li key={i}><XCircle size={14} className="gap-icon" /> {g}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {parsed.critical_missing_skills?.length > 0 && (
+                  <div className="assessment-section">
+                    <h4><AlertTriangle size={16} className="gap-icon" /> Critical Missing Skills</h4>
+                    <div className="missing-skills">
+                      {parsed.critical_missing_skills.map((skill, i) => (
+                        <Badge key={i} variant="danger" size="sm">{skill}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p>{String(raw)}</p>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="detail-tabs">
         {['profile', 'history'].map((t) => (

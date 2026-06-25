@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal, CheckSquare, Square, X, RefreshCw, UserCheck } from 'lucide-react';
+import { Download, ArrowUpDown, Zap, Users, MessageSquare, ChevronDown, ChevronUp, Save, SlidersHorizontal, CheckSquare, Square, X, RefreshCw, UserCheck, Upload, Plus } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../components/common/ToastContainer';
 import Badge from '../components/common/Badge';
@@ -30,6 +30,7 @@ export default function ShortlistPage() {
   const [allCandidates, setAllCandidates] = useState([]);
   const [pickerSelectedIds, setPickerSelectedIds] = useState(new Set());
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -252,6 +253,9 @@ export default function ShortlistPage() {
           </p>
         </div>
         <div className="shortlist-actions">
+          <Button variant="ghost" size="sm" icon={Upload} onClick={() => navigate(`/candidates?jdId=${jdId}`)}>
+            Add Resumes
+          </Button>
           <Button variant="ghost" size="sm" icon={Download} onClick={handleExportCsv}>Export CSV</Button>
           <Button variant="secondary" size="sm" icon={Zap} onClick={openScoringModal} loading={scoring} disabled={!!scoringBatchId}>
             {scoring ? 'Starting...' : 'Run Scoring'}
@@ -529,6 +533,13 @@ export default function ShortlistPage() {
                 {pickerSelectedIds.size === allCandidates.length ? 'Deselect All' : 'Select All'}
               </button>
               <span className="selection-count">{pickerSelectedIds.size} of {allCandidates.length} selected</span>
+              <input
+                type="text"
+                className="picker-search"
+                placeholder="Search candidates..."
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+              />
             </div>
             <div className="picker-list">
               {loadingCandidates ? (
@@ -536,7 +547,11 @@ export default function ShortlistPage() {
               ) : allCandidates.length === 0 ? (
                 <div className="loading-state">No parsed candidates found</div>
               ) : (
-                allCandidates.map(c => {
+                allCandidates.filter(c => {
+                  if (!pickerSearch.trim()) return true;
+                  const q = pickerSearch.toLowerCase();
+                  return (c.name || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q);
+                }).map(c => {
                   const isScored = results.some(r => r.candidate.id === c.id);
                   return (
                     <div
